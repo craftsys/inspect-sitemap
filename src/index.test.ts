@@ -2,21 +2,6 @@ import inspectSitemap from "./index";
 import type FetchMockType from "fetch-mock-jest";
 jest.mock("node-fetch", () => require("fetch-mock-jest").sandbox());
 import m from "node-fetch";
-jest.mock("cli-progress", () => {
-  // mock the cli-progress
-  class Bar {
-    update() {}
-    stop() {}
-  }
-  return {
-    MultiBar: class {
-      create() {
-        return new Bar();
-      }
-      stop() {}
-    },
-  };
-});
 
 const fetchMock: typeof FetchMockType = m as any;
 

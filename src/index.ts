@@ -1,7 +1,5 @@
 import fetch from "node-fetch";
-import cliProgress, { SingleBar } from "cli-progress";
 import { parse } from "node-html-parser";
-import _colors from "colors";
 
 const MAX_ACTIVE_PAGES = 100;
 
@@ -33,12 +31,14 @@ Please check if your server is running.`
   const xml = parse(text);
   const locs = xml.querySelectorAll("loc");
   const urls = locs.map((loc) => loc.innerText);
+  if (!urls.length) {
+    throw new Error(`Sitemap is empty!! ${sitemapUrl}`)
+  }
   await Promise.all(
     urls.map((url) => {
       return checkPageIncludingSubPage(url, null);
     })
   );
-  closeAllPage();
   let response: {
     baseUrl: string;
     brokenLinks: Array<{
@@ -75,7 +75,7 @@ async function checkPageIncludingSubPage(
   }
   checkedUrls.push(sanitizedUrl || url);
   if (!sanitizedUrl) {
-    logInfo(url, `Skipped`);
+    console.log(`.. Skipped : ${url}`);
     return;
   }
   const pageText = await withPageOpen<string | null>(sanitizedUrl, async () => {
@@ -90,51 +90,20 @@ async function checkPageIncludingSubPage(
       throw e;
     }
   });
+  console.log("\x1b[32m%s\x1b[0m", `All Good: ${sanitizedUrl}`);
   if (sanitizedUrl && sanitizedUrl.indexOf(BASE_URL) === -1) {
-    logInfo(sanitizedUrl, `Skipped sub-page`);
+    console.log("\x1b[2m%s\x1b[0m", `.. Skipped sub-pages : ${sanitizedUrl}`);
     return;
   }
   if (!pageText) return;
   // get all the pages
   const hrefs = getLinksFromHTMLText(pageText);
   if (hrefs && hrefs.length) {
-    logInfo(
-      sanitizedUrl,
-      `${hrefs.length} link${hrefs.length > 1 ? "s" : ""} on`
-    );
+    console.log("\x1b[35m%s\x1b[0m", `${hrefs.length} link${hrefs.length > 1 ? "s" : ""} on : ${sanitizedUrl}`);
     await Promise.all(
       hrefs.map((href) => checkPageIncludingSubPage(href, sanitizedUrl))
     );
   }
-}
-
-type Page = {
-  url: null | string;
-  bar: SingleBar;
-};
-
-const pages: Array<Page> = [];
-// create new container
-const multibar = new cliProgress.MultiBar({
-  forceRedraw: true,
-  format: (_options, _params, payload) => {
-    return `${payload.status} : ${payload.url}`;
-  },
-});
-
-function logInfo(url: string, info: string) {
-  const bar = multibar.create(1, 1, { url: url, status: _colors.dim(info) });
-  pages.push({
-    bar,
-    url: url,
-  });
-}
-
-function closeAllPage() {
-  for (let page of pages) {
-    page.bar.stop();
-  }
-  multibar.stop();
 }
 
 let activePagesCount = 0;
@@ -145,26 +114,11 @@ async function withPageOpen<T>(
 ): Promise<T | null> {
   if (activePagesCount < MAX_ACTIVE_PAGES) {
     activePagesCount++;
-    const page: Page = {
-      bar: multibar.create(1, 0, { url, status: "Checking..." }),
-      url: url,
-    };
-    pages.push(page);
     let handlePageReturnValue = null;
     try {
       handlePageReturnValue = await handlePage();
-      page.bar.update(1, {
-        url: url,
-        status: _colors.green("All Good"),
-      });
     } catch (error) {
-      page.bar.update(1, {
-        url: url,
-        status: _colors.red("Failed  "),
-      });
     }
-    page.url = null;
-    page.bar.stop();
     activePagesCount--;
     return handlePageReturnValue;
   }
@@ -228,7 +182,8 @@ function sanitizeUrl(url: string, parentUrl?: string | null): string | null {
     }
   }
   // remove #hash
-  return url.replace(/#.*$/g, "");
+  return url.replace(/#.*$/g, "")
+      .replace(/\?.*$/g, "");
 }
 
 function isUrlInsepctable(url: string): boolean {

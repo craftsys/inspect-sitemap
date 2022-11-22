@@ -1,6 +1,5 @@
 #!/usr/bin/env node
 import inspectSitemap from "../index";
-import colors from "colors";
 
 const [, , ...args] = process.argv;
 
@@ -12,7 +11,7 @@ if (args.length) {
     try {
       const { brokenLinks, baseUrl } = await inspectSitemap(sitemap, options);
       if (brokenLinks.length === 0) {
-        console.log(colors.green("\nAll links working\n"));
+        console.log("\x1b[32m%s\x1b[0m", "\nAll links working\n");
         return;
       }
       let urlsWithMajorIssue = [];
@@ -26,11 +25,10 @@ if (args.length) {
           // this page is not hosted on this page
           // can be ignored
           console.log(
-            colors.yellow(
-              `${link} [parent: ${parentPage || baseUrl}]\n   ==> ${
-                (typeof error === "string" ? error : error?.message) || ""
-              }`
-            )
+            "\x1b[33m%s\x1b[0m",
+            `${link} [parent: ${parentPage || baseUrl}]\n   ==> ${
+              (typeof error === "string" ? error : error?.message) || ""
+            }`
           );
         } else {
           urlsWithMajorIssue.push({ link, parentPage, error });
@@ -39,23 +37,24 @@ if (args.length) {
       if (urlsWithMajorIssue.length) {
         console.log("\n\n---------------");
         console.log(
-          colors.red(
-            `Following urls have issues. These are from your own domain "${baseUrl}" and must be fixed.\n`
-          )
+          "\x1b[31m%s\x1b[0m",
+          `Following urls have issues. These are from your own domain "${baseUrl}" and must be fixed.\n`
         );
         for (let { link, parentPage, error } of urlsWithMajorIssue) {
           console.log(
-            colors.red(
-              `${link} [parent: ${parentPage || baseUrl}]\n   ==> ${
-                (typeof error === "string" ? error : error?.message) || ""
-              }`
-            )
+            "\x1b[31m%s\x1b[0m",
+            `${link} [parent: ${parentPage || baseUrl}]\n   ==> ${
+              (typeof error === "string" ? error : error?.message) || ""
+            }`
           );
         }
         throw new Error("Broken links in sitemap.");
       }
     } catch (e) {
-      console.error((e.message || "Something went wrong") + "\n");
+      console.error(
+        "\x1b[31m%s\x1b[0m",
+        (e.message || "Something went wrong") + "\n"
+      );
       // something went wrong
       process.exit(1);
     }
