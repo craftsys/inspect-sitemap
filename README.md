@@ -101,6 +101,57 @@ it("Has valid sitemap", async () => {
 })
 ```
 
+## Running in CI
+
+We can use [start-server-and-test](https://www.npmjs.com/package/start-server-and-test) to
+
+- Start Server
+- Wait for URL
+- Run Tests
+- Shut down server on tests end
+
+Install the following dependencies if you haven't already.
+
+```sh
+npm install --save-dev inspect-sitemap start-server-and-test
+```
+
+**Assuming**
+
+- you can build your site with `npm run build`
+- host locally it using `npm run serve:build` on port 8080
+
+Add the following script to your `package.json` file. You should update these script according to your setup.
+
+```json
+{
+  "scripts": {
+    "test": "inspect-sitemap http://localhost:8080/sitemap.xml",
+    "test:ci": "npm run build && start-server-and-test serve:build http://localhost:8080 test"
+  }
+}
+```
+
+Now you can execute this insite your ci with `npm run test:ci`. 
+
+### Static Sites
+
+If you have a static site in a directory, you can use [serve](https://www.npmjs.com/package/serve) to serve the directory locally.
+
+```sh
+npm install --save-dev serve
+```
+Assuming your build output directory is `dist`. Please update accordingly if needed.
+
+```json
+{
+  "scripts": {
+    "serve:build": "serve -d dist -p 8080"
+  }
+}
+```
+
+
 ## Licence
 
 MIT
