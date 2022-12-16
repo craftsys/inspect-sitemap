@@ -3,8 +3,8 @@ import { parse } from "node-html-parser";
 
 const MAX_ACTIVE_PAGES = 100;
 
-const checkedUrls: Array<string> = [];
-const invalidURls: Array<
+let checkedUrls: Array<string> = [];
+let invalidURls: Array<
   [url: string, error: Error, parentUrl: string | null]
 > = [];
 
@@ -16,6 +16,8 @@ export default async function inspectSitemap(
   sitemapUrl: string,
   _options?: Options
 ) {
+  checkedUrls = []
+  invalidURls = []
   BASE_URL = getBaseUrlFromSiteMap(sitemapUrl);
   let text = "";
   try {
@@ -144,8 +146,11 @@ async function getPageContent(url: string) {
 
 function getLinksFromHTMLText(htmlText: string): Array<string> {
   try {
-    const xml = parse(htmlText);
-    const anchorElms = xml.querySelectorAll("a");
+    const dom = parse(htmlText);
+    // remove all the templates
+    const templates = dom.querySelectorAll('template')
+    templates.forEach(template => template.remove())
+    const anchorElms = dom.querySelectorAll("a");
     if (!anchorElms) return [];
     const urls = anchorElms.map((a) => a.getAttribute("href"));
     return urls.filter((link): link is string => Boolean(link));

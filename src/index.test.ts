@@ -97,3 +97,21 @@ it("handles broken sitemap", async () => {
     expect(e).not.toBeUndefined();
   }
 });
+
+it("ignore template tags in html", async () => {
+  fetchMock.get("http://localhost/sitemap.xml", {
+    body: `<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+<url>
+<loc>http://localhost/</loc>
+<lastmod>2021-01-14</lastmod>
+<priority>1.00</priority>
+</url>
+</urlset>`,
+  });
+  fetchMock.get("http://localhost/", {
+    body: `<div><template><a href="/e404/">About</a></template></div>`,
+  });
+  fetchMock.get("http://localhost/e404/", 404);
+  const resp = await inspectSitemap("http://localhost/sitemap.xml");
+  expect(resp.brokenLinks).toHaveLength(0);
+});
