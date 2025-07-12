@@ -4,37 +4,66 @@ import { parse } from "node-html-parser";
 const MAX_ACTIVE_PAGES = 100;
 
 let checkedUrls: Array<string> = [];
-let invalidURls: Array<
-  [url: string, error: Error, parentUrl: string | null]
-> = [];
+let invalidURls: Array<[url: string, error: Error, parentUrl: string | null]> =
+  [];
 
 let BASE_URL = "";
 
 type Options = any;
 
+async function fetchSitemap(url: string): Promise<string> {
+  return getPageContent(url).catch((e) => {
+    const error = e as Error;
+    throw new Error(
+      `Unable to access the sitemap at ${url}.
+Error: ${error.message}
+
+Please check if your server is running.`
+    );
+  });
+}
+
 export default async function inspectSitemap(
   sitemapUrl: string,
   _options?: Options
 ) {
-  checkedUrls = []
-  invalidURls = []
+  checkedUrls = [];
+  invalidURls = [];
   BASE_URL = getBaseUrlFromSiteMap(sitemapUrl);
-  let text = "";
-  try {
-    text = await getPageContent(sitemapUrl);
-  } catch (e) {
-    throw new Error(
-      `Unable to access the sitemap at ${sitemapUrl}.
-Error: ${e.message}
-
-Please check if your server is running.`
-    );
-  }
+  let text = await fetchSitemap(sitemapUrl);
   const xml = parse(text);
-  const locs = xml.querySelectorAll("loc");
-  const urls = locs.map((loc) => loc.innerText);
+  let urls = xml.querySelectorAll("urlset loc").map((l) => l.innerText);
+  let otherSitemaps = xml
+    .querySelectorAll("sitemapindex loc")
+    .map((t) => t.innerText);
+  let allSitemaps: Array<string> = [sitemapUrl, ...otherSitemaps];
+
+  while (otherSitemaps.length) {
+    let newSitemaps: Array<string> = [];
+    (await Promise.all(otherSitemaps.map((url) => fetchSitemap(url)))).map(
+      (text) => {
+        const xml = parse(text);
+        // push new locations
+        urls = urls.concat(
+          xml
+            .querySelectorAll("urlset loc")
+            .map((l) => l.innerText)
+            .filter((url) => urls.indexOf(url) === -1) // only push new ones
+        );
+        // store new sitemaps
+        newSitemaps = newSitemaps.concat(
+          xml
+            .querySelectorAll("sitemapindex loc")
+            .map((l) => l.innerText)
+            .filter((url) => allSitemaps.indexOf(url) === -1) // only push new ones
+        );
+      }
+    );
+    allSitemaps = allSitemaps.concat(newSitemaps);
+    otherSitemaps = newSitemaps;
+  }
   if (!urls.length) {
-    throw new Error(`Sitemap is empty!! ${sitemapUrl}`)
+    throw new Error(`Sitemap is empty!! ${sitemapUrl}`);
   }
   await Promise.all(
     urls.map((url) => {
@@ -43,6 +72,8 @@ Please check if your server is running.`
   );
   let response: {
     baseUrl: string;
+    sitemapUrls: Array<string>;
+    allUrls: Array<string>;
     brokenLinks: Array<{
       link: string;
       parentPage: null | string;
@@ -52,6 +83,8 @@ Please check if your server is running.`
   } = {
     baseUrl: BASE_URL,
     brokenLinks: [],
+    allUrls: urls,
+    sitemapUrls: allSitemaps,
   };
   if (invalidURls.length) {
     for (let i = 0; i < invalidURls.length; i++) {
@@ -88,7 +121,8 @@ async function checkPageIncludingSubPage(
       }
       return resp;
     } catch (e) {
-      invalidURls.push([sanitizedUrl, e, parentUrl]);
+      const error = e as Error;
+      invalidURls.push([sanitizedUrl, error, parentUrl]);
       throw e;
     }
   });
@@ -101,7 +135,10 @@ async function checkPageIncludingSubPage(
   // get all the pages
   const hrefs = getLinksFromHTMLText(pageText);
   if (hrefs && hrefs.length) {
-    console.log("\x1b[35m%s\x1b[0m", `${hrefs.length} link${hrefs.length > 1 ? "s" : ""} on : ${sanitizedUrl}`);
+    console.log(
+      "\x1b[35m%s\x1b[0m",
+      `${hrefs.length} link${hrefs.length > 1 ? "s" : ""} on : ${sanitizedUrl}`
+    );
     await Promise.all(
       hrefs.map((href) => checkPageIncludingSubPage(href, sanitizedUrl))
     );
@@ -119,8 +156,7 @@ async function withPageOpen<T>(
     let handlePageReturnValue = null;
     try {
       handlePageReturnValue = await handlePage();
-    } catch (error) {
-    }
+    } catch (error) {}
     activePagesCount--;
     return handlePageReturnValue;
   }
@@ -148,8 +184,8 @@ function getLinksFromHTMLText(htmlText: string): Array<string> {
   try {
     const dom = parse(htmlText);
     // remove all the templates
-    const templates = dom.querySelectorAll('template')
-    templates.forEach(template => template.remove())
+    const templates = dom.querySelectorAll("template");
+    templates.forEach((template) => template.remove());
     const anchorElms = dom.querySelectorAll("a");
     if (!anchorElms) return [];
     const urls = anchorElms.map((a) => a.getAttribute("href"));
@@ -187,8 +223,7 @@ function sanitizeUrl(url: string, parentUrl?: string | null): string | null {
     }
   }
   // remove #hash
-  return url.replace(/#.*$/g, "")
-      .replace(/\?.*$/g, "");
+  return url.replace(/#.*$/g, "").replace(/\?.*$/g, "");
 }
 
 function isUrlInsepctable(url: string): boolean {
